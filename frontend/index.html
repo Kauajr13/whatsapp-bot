@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Bot — Painel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f0f2f5;
+    color: #1a1a1a;
+    font-size: 14px;
+  }
+
+  header {
+    background: #128C7E;
+    color: white;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  header h1 { font-size: 18px; font-weight: 600; }
+  header .status { font-size: 12px; opacity: 0.8; margin-left: auto; }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+
+  .stat-card .value { font-size: 28px; font-weight: 700; color: #128C7E; }
+  .stat-card .label { font-size: 12px; color: #666; margin-top: 4px; }
+
+  .card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    margin-bottom: 20px;
+  }
+
+  .card h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; font-weight: 500; color: #555; }
+
+  input[type="text"], input[type="time"], select, textarea {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    width: 100%;
+    transition: border-color .2s;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #128C7E;
+  }
+
+  textarea { min-height: 80px; resize: vertical; }
+
+  button {
+    background: #128C7E;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .2s;
+  }
+
+  button:hover { background: #075E54; }
+
+  button.secondary {
+    background: white;
+    color: #128C7E;
+    border: 1px solid #128C7E;
+  }
+
+  button.danger { background: #dc3545; }
+  button.danger:hover { background: #b02a37; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; color: #666; padding: 8px 10px; border-bottom: 2px solid #f0f0f0; }
+  td { padding: 10px; border-bottom: 1px solid #f8f8f8; font-size: 13px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .badge.active { background: #d4edda; color: #155724; }
+  .badge.inactive { background: #f8d7da; color: #721c24; }
+
+  .actions { display: flex; gap: 6px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab {
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: #666;
+    background: white;
+    border: 1px solid #ddd;
+  }
+  .tab.active { background: #128C7E; color: white; border-color: #128C7E; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #333;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.099.537 4.073 1.479 5.795L0 24l6.386-1.443A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.813 9.813 0 01-4.98-1.355l-.356-.212-3.792.857.902-3.694-.232-.374A9.818 9.818 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/>
+  </svg>
+  <h1>WhatsApp Bot</h1>
+  <span class="status" id="status">Verificando...</span>
+</header>
+
+<div class="container">
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('rules')">Respostas</div>
+    <div class="tab" onclick="switchTab('config')">Configurações</div>
+  </div>
+
+  <div id="panel-rules" class="panel active">
+    <div class="card">
+      <h2>Nova Regra de Resposta</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Gatilho (palavra ou frase que o cliente escreve)</label>
+          <input type="text" id="r-trigger" placeholder="ex: preço, valor, quanto custa">
+        </div>
+        <div class="form-group">
+          <label>Tipo de correspondência</label>
+          <select id="r-type">
+            <option value="contains">Contém</option>
+            <option value="exact">Exato</option>
+            <option value="startswith">Começa com</option>
+            <option value="regex">Regex</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Resposta automática</label>
+        <textarea id="r-response" placeholder="Digite a resposta que o bot vai enviar..."></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Prioridade (maior = verificado primeiro)</label>
+          <input type="text" id="r-priority" value="0" placeholder="0">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button onclick="saveRule()">Salvar Regra</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Regras Cadastradas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Gatilho</th>
+            <th>Resposta</th>
+            <th>Tipo</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="rules-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="panel-config" class="panel">
+    <div class="card">
+      <h2>Mensagens do Bot</h2>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Nome do Bot</label>
+        <input type="text" id="cfg-bot_name">
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Mensagem de saudação</label>
+        <textarea id="cfg-greeting_message"></textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Mensagem fora do horário</label>
+        <textarea id="cfg-off_hours_message"></textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Mensagem quando não entende</label>
+        <textarea id="cfg-unknown_message"></textarea>
+      </div>
+      <h2 style="margin-bottom:16px">Horário de Atendimento</h2>
+      <div class="form-row" style="margin-bottom:16px">
+        <div class="form-group">
+          <label>Início</label>
+          <input type="time" id="cfg-business_hours_start">
+        </div>
+        <div class="form-group">
+          <label>Fim</label>
+          <input type="time" id="cfg-business_hours_end">
+        </div>
+      </div>
+      <h2 style="margin-bottom:16px">Inteligência Artificial</h2>
+      <div class="form-row" style="margin-bottom:16px">
+        <div class="form-group">
+          <label>IA habilitada</label>
+          <select id="cfg-ai_enabled">
+            <option value="true">Sim</option>
+            <option value="false">Não</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Usar IA quando regras não respondem</label>
+          <select id="cfg-ai_fallback">
+            <option value="true">Sim</option>
+            <option value="false">Não</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="saveConfig()">Salvar Configurações</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:8000/api'
+
+async function api(method, path, body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  })
+  return res.json()
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.classList.add('show')
+  setTimeout(() => el.classList.remove('show'), 2500)
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['rules', 'config'][i] === name)
+  })
+  document.querySelectorAll('.panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'panel-' + name)
+  })
+}
+
+async function loadStats() {
+  const s = await api('GET', '/stats')
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="value">${s.total_messages}</div><div class="label">Mensagens totais</div></div>
+    <div class="stat-card"><div class="value">${s.messages_today}</div><div class="label">Hoje</div></div>
+    <div class="stat-card"><div class="value">${s.unique_contacts}</div><div class="label">Contatos únicos</div></div>
+  `
+}
+
+async function loadRules() {
+  const rules = await api('GET', '/rules')
+  const tbody = document.getElementById('rules-table')
+  tbody.innerHTML = rules.map(r => `
+    <tr>
+      <td><strong>${r.trigger}</strong></td>
+      <td>${r.response.slice(0, 80)}${r.response.length > 80 ? '...' : ''}</td>
+      <td>${r.match_type}</td>
+      <td><span class="badge ${r.active ? 'active' : 'inactive'}">${r.active ? 'Ativa' : 'Inativa'}</span></td>
+      <td>
+        <div class="actions">
+          <button class="secondary" onclick="toggleRule(${r.id}, ${r.active})">${r.active ? 'Pausar' : 'Ativar'}</button>
+          <button class="danger" onclick="removeRule(${r.id})">Excluir</button>
+        </div>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="text-align:center;color:#999">Nenhuma regra cadastrada</td></tr>'
+}
+
+async function saveRule() {
+  const trigger = document.getElementById('r-trigger').value.trim()
+  const response = document.getElementById('r-response').value.trim()
+  if (!trigger || !response) { toast('Preencha o gatilho e a resposta'); return }
+  await api('POST', '/rules', {
+    trigger,
+    response,
+    match_type: document.getElementById('r-type').value,
+    priority: parseInt(document.getElementById('r-priority').value) || 0,
+    active: true
+  })
+  document.getElementById('r-trigger').value = ''
+  document.getElementById('r-response').value = ''
+  toast('Regra salva')
+  loadRules()
+}
+
+async function toggleRule(id, active) {
+  const rules = await api('GET', '/rules')
+  const rule = rules.find(r => r.id === id)
+  if (rule) {
+    await api('PUT', `/rules/${id}`, { ...rule, active: !active })
+    loadRules()
+  }
+}
+
+async function removeRule(id) {
+  if (!confirm('Excluir esta regra?')) return
+  await api('DELETE', `/rules/${id}`)
+  toast('Regra excluída')
+  loadRules()
+}
+
+async function loadConfig() {
+  const cfg = await api('GET', '/config')
+  Object.entries(cfg).forEach(([key, value]) => {
+    const el = document.getElementById('cfg-' + key)
+    if (el) el.value = value
+  })
+}
+
+async function saveConfig() {
+  const keys = ['bot_name', 'greeting_message', 'off_hours_message', 'unknown_message',
+                 'business_hours_start', 'business_hours_end', 'ai_enabled', 'ai_fallback']
+  const data = {}
+  keys.forEach(k => {
+    const el = document.getElementById('cfg-' + k)
+    if (el) data[k] = el.value
+  })
+  await api('POST', '/config', data)
+  toast('Configurações salvas')
+}
+
+async function checkHealth() {
+  try {
+    await fetch('http://localhost:8000/api/health')
+    document.getElementById('status').textContent = 'Online'
+  } catch {
+    document.getElementById('status').textContent = 'Backend offline'
+  }
+}
+
+checkHealth()
+loadStats()
+loadRules()
+loadConfig()
+setInterval(loadStats, 30000)
+</script>
+</body>
+</html>
