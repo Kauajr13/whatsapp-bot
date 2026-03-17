@@ -5,7 +5,7 @@ console.error = (...args) => {
     if (msg.includes('Bad MAC') || msg.includes('Failed to decrypt') || msg.includes('Session error')) return
     _consoleError(...args)
 }
-
+|| jid.endsWith('@lid')
 const { 
     default: makeWASocket, 
     useMultiFileAuthState, 
@@ -38,7 +38,7 @@ function isAllowed(jid) {
     if (MODE === 'all') return true
     if (MODE === 'whitelist') return WHITELIST.has(jid)
     if (MODE === 'groups_only') return jid.endsWith('@g.us')
-    if (MODE === 'contacts_only') return jid.endsWith('@s.whatsapp.net')
+    if (MODE === 'contacts_only') return jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')
     return false
 }
 
