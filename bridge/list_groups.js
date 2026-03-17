@@ -3,7 +3,7 @@ const pino = require('pino')
 
 const AUTH_DIR = process.env.AUTH_DIR || './auth'
 
-async function listChats() {
+async function connect() {
     const { version } = await fetchLatestBaileysVersion()
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
 
@@ -17,71 +17,76 @@ async function listChats() {
     sock.ev.on('creds.update', saveCreds)
 
     await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Timeout — make sure you are connected (auth/ folder exists)')), 20000)
-
-        sock.ev.on('connection.update', async ({ connection }) => {
-            if (connection === 'open') {
-                clearTimeout(timeout)
-                resolve()
-            }
-            if (connection === 'close') {
-                clearTimeout(timeout)
-                reject(new Error('Connection closed — run node index.js first to authenticate'))
-            }
+        const timeout = setTimeout(
+            () => reject(new Error('Timeout — make sure auth/ folder exists (run node index.js first)')),
+            20000
+        )
+        sock.ev.on('connection.update', ({ connection }) => {
+            if (connection === 'open') { clearTimeout(timeout); resolve() }
+            if (connection === 'close') { clearTimeout(timeout); reject(new Error('Connection closed')) }
         })
     })
 
-    console.log('\nFetching groups...\n')
+    return sock
+}
+
+async function main() {
+    const sock = await connect()
+
+    // ── Grupos ────────────────────────────────────────────────────
+    console.log('\nGROUPS')
+    console.log('─'.repeat(70))
+
     const groups = await sock.groupFetchAllParticipating()
-
-    const groupList = Object.values(groups).map(g => ({
-        name: g.subject,
-        jid: g.id,
-        participants: g.participants.length,
-    }))
-
-    groupList.sort((a, b) => a.name.localeCompare(b.name))
+    const groupList = Object.values(groups)
+        .map(g => ({ name: g.subject, jid: g.id, members: g.participants.length }))
+        .sort((a, b) => a.name.localeCompare(b.name))
 
     if (groupList.length === 0) {
         console.log('No groups found.')
     } else {
-        console.log('GROUPS')
-        console.log('─'.repeat(70))
         groupList.forEach(g => {
-            console.log(`Name : ${g.name}`)
-            console.log(`JID  : ${g.jid}`)
-            console.log(`Members: ${g.participants}`)
+            console.log(`Name    : ${g.name}`)
+            console.log(`JID     : ${g.jid}`)
+            console.log(`Members : ${g.members}`)
             console.log('─'.repeat(70))
         })
-        console.log(`\nTotal: ${groupList.length} group(s)`)
+        console.log(`Total: ${groupList.length} group(s)`)
     }
 
-    console.log('\nFetching contacts...\n')
-    const contacts = sock.store?.contacts || {}
-    const contactList = Object.values(contacts)
-        .filter(c => c.id.endsWith('@s.whatsapp.net') && c.name)
-        .map(c => ({ name: c.name, jid: c.id }))
-        .sort((a, b) => a.name.localeCompare(b.name))
+    // ── Lookup por número ─────────────────────────────────────────
+    console.log('\nCONTACT LOOKUP')
+    console.log('─'.repeat(70))
+    console.log('Baileys does not have access to your phone contacts.')
+    console.log('To find a JID, pass the number as an argument:')
+    console.log('')
+    console.log('  node list_groups.js 5511999999999')
+    console.log('')
+    console.log('Format: country code + area code + number, no spaces or symbols.')
+    console.log('─'.repeat(70))
 
-    if (contactList.length > 0) {
-        console.log('CONTACTS (with saved names)')
-        console.log('─'.repeat(70))
-        contactList.forEach(c => {
-            console.log(`Name : ${c.name}`)
-            console.log(`JID  : ${c.jid}`)
-            console.log('─'.repeat(70))
-        })
-        console.log(`\nTotal: ${contactList.length} contact(s)`)
-    } else {
-        console.log('No contacts with saved names found.')
-        console.log('Tip: contacts appear here after they send you a message or you chat with them.')
+    const numberArg = process.argv[2]
+    if (numberArg) {
+        const cleaned = numberArg.replace(/\D/g, '')
+        console.log(`\nLooking up: ${cleaned}`)
+        try {
+            const [result] = await sock.onWhatsApp(cleaned)
+            if (result?.exists) {
+                console.log('Found!')
+                console.log(`JID  : ${result.jid}`)
+            } else {
+                console.log(`Number ${cleaned} not found on WhatsApp.`)
+            }
+        } catch (e) {
+            console.log(`Lookup failed: ${e.message}`)
+        }
     }
 
-    await sock.logout()
+    await sock.end()
     process.exit(0)
 }
 
-listChats().catch(err => {
+main().catch(err => {
     console.error('Error:', err.message)
     process.exit(1)
 })

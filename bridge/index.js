@@ -1,33 +1,38 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+// suprime erros de descriptografia do Baileys que não afetam o funcionamento
+const _consoleError = console.error
+console.error = (...args) => {
+    const msg = args.join(' ')
+    if (msg.includes('Bad MAC') || msg.includes('Failed to decrypt') || msg.includes('Session error')) return
+    _consoleError(...args)
+}
+
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    isJidGroup,
+} = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const axios = require('axios')
 const pino = require('pino')
 const qrcode = require('qrcode-terminal')
+const NodeCache = require('node-cache')
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
 const AUTH_DIR = process.env.AUTH_DIR || './auth'
 
+const msgRetryCounterCache = new NodeCache()
 const logger = pino({ level: 'silent' })
 
-// ── Filtros de quem o bot responde ───────────────────────────────
-//
-// MODO: 'all' | 'whitelist' | 'groups_only' | 'contacts_only'
-//
-// 'all'           — responde todo mundo (comportamento atual)
-// 'whitelist'     — responde apenas os números/grupos listados abaixo
-// 'groups_only'   — responde apenas grupos
-// 'contacts_only' — responde apenas contatos individuais
-//
-const MODE = 'whitelist'
+const MODE = 'all'
 
-// Números e grupos autorizados (usado apenas no modo 'whitelist')
-// Formato número:  '5511999999999@s.whatsapp.net'
-// Formato grupo:   '120363XXXXXXXXXX@g.us'
-// Para pegar o JID de um grupo, ative o modo 'all' temporariamente
-// e veja o log — o JID aparece no campo phone.
 const WHITELIST = new Set([
-    '120363358269939540@g.us',
+    'lid@lid',
 ])
+
+const BOT_PREFIX = null
 
 function isAllowed(jid) {
     if (MODE === 'all') return true
@@ -35,6 +40,16 @@ function isAllowed(jid) {
     if (MODE === 'groups_only') return jid.endsWith('@g.us')
     if (MODE === 'contacts_only') return jid.endsWith('@s.whatsapp.net')
     return false
+}
+
+function shouldProcess(text) {
+    if (!BOT_PREFIX) return true
+    return text.toLowerCase().startsWith(BOT_PREFIX.toLowerCase())
+}
+
+function stripPrefix(text) {
+    if (!BOT_PREFIX) return text
+    return text.slice(BOT_PREFIX.length).trim()
 }
 
 async function sendToBackend(phone, message, name) {
@@ -46,7 +61,7 @@ async function sendToBackend(phone, message, name) {
         })
         return res.data.response
     } catch (err) {
-        console.error('Backend error:', err.message)
+        _consoleError('Backend error:', err.message)
         return null
     }
 }
@@ -57,12 +72,19 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         version,
-        auth: state,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
+        },
+        msgRetryCounterCache,
         logger,
         browser: ['WhatsApp Bot', 'Chrome', '1.0.0'],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
         keepAliveIntervalMs: 10000,
+        syncFullHistory: false,
+        markOnlineOnConnect: false,
+        retryRequestDelayMs: 2000,
     })
 
     sock.ev.on('creds.update', saveCreds)
@@ -76,9 +98,7 @@ async function connectToWhatsApp() {
         if (connection === 'close') {
             const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
             const loggedOut = statusCode === DisconnectReason.loggedOut
-
             console.log(`Connection closed (code: ${statusCode})`)
-
             if (loggedOut) {
                 console.log('Logged out. Delete the auth/ folder and restart.')
             } else {
@@ -88,41 +108,57 @@ async function connectToWhatsApp() {
         }
 
         if (connection === 'open') {
-            console.log(`Connected to WhatsApp | Mode: ${MODE}`)
+            const prefixInfo = BOT_PREFIX ? `prefix: ${BOT_PREFIX}` : 'no prefix'
+            console.log(`Connected | Mode: ${MODE} | ${prefixInfo}`)
         }
     })
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return
+	console.log(`[DEBUG] upsert type=${type} count=${messages.length}`)
+	    
+	for (const msg of messages) {
+	    console.log(`[DEBUG] fromMe=${msg.key.fromMe} jid=${msg.key.remoteJid} hasMsg=${!!msg.message}`)
+		
+	    if (msg.key.fromMe) continue
+	    if (!msg.message) continue
 
-        for (const msg of messages) {
-            if (msg.key.fromMe) continue
-            if (!msg.message) continue
+	    const phone = msg.key.remoteJid
+	    console.log(`[DEBUG] isAllowed(${phone})=${isAllowed(phone)} whitelist=${JSON.stringify([...WHITELIST])}`)
+		
+            if (!isAllowed(phone)) continue
 
-            const phone = msg.key.remoteJid
-
-            if (!isAllowed(phone)) {
-                console.log(`[BLOCKED] ${phone}`)
-                continue
-            }
-
-            const text = (
+            const raw = (
                 msg.message.conversation ||
                 msg.message.extendedTextMessage?.text ||
                 msg.message.imageMessage?.caption ||
                 ''
             ).trim()
 
+            if (!raw) continue
+            if (!shouldProcess(raw)) continue
+
+            const text = stripPrefix(raw)
             if (!text) continue
 
             const name = msg.pushName || null
-            console.log(`[${new Date().toISOString()}] ${phone} (${name}): ${text.slice(0, 80)}`)
+            console.log(`[IN]  ${phone} (${name}): ${raw.slice(0, 80)}`)
 
             const response = await sendToBackend(phone, text, name)
+            if (!response) continue
 
-            if (response) {
+            if (isJidGroup(phone)) {
+                try {
+                    const groupMeta = await sock.groupMetadata(phone)
+                    const participants = groupMeta.participants.map(p => p.id)
+                    await sock.assertSessions(participants, false)
+                } catch (e) {}
+            }
+
+            try {
                 await sock.sendMessage(phone, { text: response })
-                console.log(`[${new Date().toISOString()}] -> ${phone}: ${response.slice(0, 80)}`)
+                console.log(`[OUT] ${phone}: ${response.slice(0, 80)}`)
+            } catch (err) {
+                _consoleError(`Send failed (${phone}): ${err.message}`)
             }
         }
     })
@@ -131,6 +167,6 @@ async function connectToWhatsApp() {
 }
 
 connectToWhatsApp().catch(err => {
-    console.error('Fatal error:', err)
+    _consoleError('Fatal error:', err)
     process.exit(1)
 })
